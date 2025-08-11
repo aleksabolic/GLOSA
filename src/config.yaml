@@ -1,0 +1,6 @@
+speed:
+  min_kmh: 18.0
+  max_kmh: 80.0
+
+visualization:
+  time_horizon_cycles: 3
