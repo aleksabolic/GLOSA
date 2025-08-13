@@ -25,8 +25,9 @@ python -m venv venv
 # Activate the virtual environment
 # On Windows
 venv\Scripts\activate
-# On macOS/Linux
-source venv/bin/activate
+
+# On Ubuntu (fish)
+source venv/bin/activate.fish
 ```
 
 Once the virtual environment is activated, install the required dependencies:
