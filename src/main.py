@@ -11,14 +11,15 @@ from utils import (
 from viz import animate_road_view, animate_speed, show_plots
 
 # Problem setup
-distances = [230.0, 280.0, 260.0, 320.0]
-cycles   = [60.0, 56.0, 62.0, 58.0]
-offsets  = [8.0, 12.0, 0.0, 18.0]
-g_durs   = [20.0, 18.0, 22.0, 16.0]
+distances = [300.0, 450.0, 280.0, 500.0, 350.0, 420.0, 380.0, 600.0]
+cycles    = [65.0, 72.0, 58.0, 80.0, 70.0, 60.0, 75.0, 90.0]
+offsets   = [10.0, 20.0, 5.0,  30.0, 12.0, 25.0, 15.0,  40.0]
+g_durs    = [25.0, 22.0, 18.0, 28.0, 20.0, 18.0, 24.0,  30.0]
+
 
 windows  = [[(off, off+dur)] for off, dur in zip(offsets, g_durs)]
 v_max, a_max = 60/3.6, 2.0
-t0, v0 = 0.0, 60.0/3.6
+t0, v0 = 0.0, 0.0
 
 # Plan earliest-arrival
 cum_dist = [0.0]
@@ -32,7 +33,6 @@ for i, d in enumerate(distances):
     t_uncon = t + T_min_link(d, v, v_max, a_max)
     t_cross = earliest_green_at_or_after(t_uncon, windows[i], cycles[i])
     dt = t_cross - t
-    # seg_t_rel, seg_v, v_exit = solve_profile_segment(d, v, dt, v_max, a_max)
     res = solve_profile_segment(d, v, dt, v_max, a_max)  # returns (t_rel, v, v_exit) or None
     if res is None:
         raise RuntimeError(f"Infeasible segment {i}: d={d}, dt={dt}, v_in={v}, v_max={v_max}, a_max={a_max}")
@@ -60,7 +60,7 @@ def sim_pos_of_t(tq):
     return pos_of_t(tq, times, speeds, pos_knots)
 
 # Time samples for animations
-fps = 60
+fps = 10
 frames = min(400, max(2, int(np.ceil(total_time * fps))))
 t_samples = np.linspace(0.0, total_time, frames)
 
