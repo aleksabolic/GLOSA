@@ -57,6 +57,7 @@ def animate_speed(sim_data):
     ax.set_ylabel("speed (km/h)")
     ax.set_title("Speed vs time (km/h)")
     ax.plot(times, speeds)
+    fig.savefig("./plots/speed_profile.png")
     
     cursor_point, = ax.plot([0], [speeds[0]], marker="o")
     cursor_line = ax.axvline(0.0, linestyle="--", linewidth=0.8)
