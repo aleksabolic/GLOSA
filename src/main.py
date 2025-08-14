@@ -82,5 +82,11 @@ anim1 = animate_road_view(sim_data)
 anim2 = animate_speed(sim_data)
 print(f'total time: {total_time}')
 
+# anim1._fig.tight_layout()
+# anim1.save("./plots/car_anim.gif", writer='pillow', fps=30)
+
+# anim2._fig.tight_layout()
+# anim2.save("./plots/speed_anim.gif", writer='pillow', fps=30)
+
 # Show plots
 show_plots()

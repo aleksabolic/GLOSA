@@ -44,3 +44,13 @@ After setting up the environment, you can run the GLosa algorithm and visualize 
    ```bash
    python src/main.py
    ```
+
+## Traffic Animations
+
+### Car Animation
+
+![Car Animation](plots/car_anim.gif)
+
+### Speed Profile
+
+![Speed Animation](plots/speed_anim.gif)
