@@ -28,24 +28,32 @@ def earliest_green_at_or_after(t, win_list, C, k_ahead=6):
         raise RuntimeError("no green")
     return best
 
-def solve_profile_segment(d, v_in, dt, v_max, a_max, n=1001):
+import numpy as np
+
+def solve_profile_segment(
+    d, v_in, dt, v_max, a_max, n=1001,
+    mode="flat",          # "flat" (default) or "time"
+    v1_min=None           # optional lower bound on exit speed from lookahead
+):
     """
-    Returns (t, v, v_exit):
-      t: time samples in [0, dt]
-      v: velocity samples with 0<=v<=v_max and |dv/dt|<=a_max
-      v_exit: maximal feasible terminal speed
-    Returns None if truly infeasible.
+    Returns (t, v, v_exit) or None if infeasible.
+
+    mode="flat": minimize peak speed (choose smallest speed cap that still covers d)
+    mode="time": maximize exit speed (your current behavior)
+    v1_min: required minimum exit speed (from lookahead); if None, no requirement.
     """
     a = float(a_max); T = float(dt); v0 = float(v_in); vmax = float(v_max)
-    if T <= 0 or a <= 0 or vmax < 0 or v0 < 0 or d < 0: 
+    if T <= 0 or a <= 0 or vmax < 0 or v0 < 0 or d < 0:
         return None
 
     t = np.linspace(0.0, T, n)
     trapz = lambda x: float(np.trapz(x, t))
 
-    def envelopes(v1):
-        up = np.minimum.reduce([np.full(n, vmax), v0 + a*t, v1 + a*(T - t)])
-        lo = np.maximum.reduce([np.zeros(n),       v0 - a*t, v1 - a*(T - t)])
+    def envelopes(v1, cap=None):
+        # cap is an optional temporary speed limit (<= v_max) to “flatten” the profile
+        lim = vmax if cap is None else min(vmax, cap)
+        up = np.minimum.reduce([np.full(n, lim), v0 + a*t, v1 + a*(T - t)])
+        lo = np.maximum.reduce([np.zeros(n),     v0 - a*t, v1 - a*(T - t)])
         return lo, up
 
     def fill_from_top(lo, up, area):
@@ -53,43 +61,78 @@ def solve_profile_segment(d, v_in, dt, v_max, a_max, n=1001):
         for _ in range(60):
             lam = 0.5*(lam_lo + lam_hi)
             v = np.clip(up - lam, lo, up)
-            if trapz(v) > area: 
+            if trapz(v) > area:
                 lam_lo = lam
             else:
                 lam_hi = lam
         return np.clip(up - lam_hi, lo, up)
 
-    # terminal-speed bounds
+    # terminal-speed bounds from accel and v_max
     loB = max(0.0, v0 - a*T)
     hiB = min(vmax, v0 + a*T)
 
-    # tolerant feasibility check using extreme envelopes
+    # quick feasibility with true v_max
     smax = trapz(np.minimum.reduce([np.full(n, vmax), v0 + a*t, hiB + a*(T - t)]))
     smin = trapz(np.maximum.reduce([np.zeros(n),       v0 - a*t, loB - a*(T - t)]))
-    epsA = 1e-6 * max(1.0, d, vmax*T)  # robust tolerance for sampling error
+    epsA = 1e-6 * max(1.0, d, vmax*T)
     if d > smax + epsA or d < smin - epsA:
         return None
 
-    # helper: minimal area attainable for a given v1 (lower envelope)
+    # helper for minimal area attainable for a given terminal speed
     def smin_given(v1):
         lo = np.maximum.reduce([np.zeros(n), v0 - a*t, v1 - a*(T - t)])
         return trapz(lo)
 
-    # pick v1 to maximize terminal speed while keeping area reachable
-    if d >= smin_given(hiB) - epsA:
-        v1 = hiB
-    else:
-        L, R = loB, hiB
-        for _ in range(60):
-            m = 0.5*(L + R)
-            if smin_given(m) > d: 
-                R = m
-            else:
-                L = m
-        v1 = L
+    # --- mode: time-optimal (original behavior) -------------------------------
+    if mode == "time":
+        if d >= smin_given(hiB) - epsA:
+            v1 = hiB
+        else:
+            L, R = loB, hiB
+            for _ in range(60):
+                m = 0.5*(L + R)
+                if smin_given(m) > d:
+                    R = m
+                else:
+                    L = m
+            v1 = L
+        lo, up = envelopes(v1)
+        v = fill_from_top(lo, up, d)
+        v[0], v[-1] = v0, v1
+        return t, v, v1
 
-    # build the profile by “filling from the top” to hit exact distance
-    lo, up = envelopes(v1)
+    # --- mode: flat (minimize peak speed subject to covering d) ---------------
+    # respect any required exit-speed lower bound
+    if v1_min is None:
+        v1_req = loB
+    else:
+        v1_req = max(loB, min(hiB, float(v1_min)))
+
+    # bisection on temporary speed cap c in [c_lo, c_hi] to find the smallest
+    # cap that still allows area >= d.
+    def smax_with_cap(c):
+        # Use the best (largest allowed) v1 under this cap for the "can we reach d?" test
+        v1c = min(hiB, c)
+        _, upc = envelopes(v1c, cap=c)
+        return trapz(upc)
+
+    c_lo = max(0.0, v1_req)   # cap must be at least required exit speed
+    c_hi = vmax
+    if d > smax_with_cap(c_hi) + epsA:
+        return None  # even full v_max cap can't cover distance (shouldn't happen due to earlier check)
+
+    for _ in range(60):
+        c_mid = 0.5*(c_lo + c_hi)
+        if smax_with_cap(c_mid) >= d - epsA:
+            c_hi = c_mid
+        else:
+            c_lo = c_mid
+    cap = c_hi
+
+    # choose an exit speed not exceeding the cap, but >= v1_req
+    v1 = max(v1_req, min(hiB, cap))
+
+    lo, up = envelopes(v1, cap=cap)
     v = fill_from_top(lo, up, d)
     v[0], v[-1] = v0, v1
     return t, v, v1
