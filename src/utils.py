@@ -28,115 +28,155 @@ def earliest_green_at_or_after(t, win_list, C, k_ahead=6):
         raise RuntimeError("no green")
     return best
 
-import numpy as np
-
-def solve_profile_segment(
-    d, v_in, dt, v_max, a_max, n=1001,
-    mode="flat",          # "flat" (default) or "time"
-    v1_min=None           # optional lower bound on exit speed from lookahead
-):
+def solve_profile_segment(distance, v_initial, time_total, v_max, a_max, n_points=1001,
+                          mode="flat", min_exit_speed=None):
     """
-    Returns (t, v, v_exit) or None if infeasible.
+    Computes a speed profile for covering a given distance within a specified time.
 
-    mode="flat": minimize peak speed (choose smallest speed cap that still covers d)
-    mode="time": maximize exit speed (your current behavior)
-    v1_min: required minimum exit speed (from lookahead); if None, no requirement.
+    Parameters:
+        distance (float): Distance to cover.
+        v_initial (float): Initial speed.
+        time_total (float): Total available time.
+        v_max (float): Maximum allowed speed.
+        a_max (float): Maximum allowed acceleration.
+        n_points (int): Number of discretization points for time.
+        mode (str): "time" for time-optimal (maximize exit speed) or "flat" to minimize peak speed.
+        min_exit_speed (float, optional): Minimum required exit speed.
+
+    Returns:
+        tuple: (time_array, speed_profile, exit_speed) if feasible; otherwise None.
     """
-    a = float(a_max); T = float(dt); v0 = float(v_in); vmax = float(v_max)
-    if T <= 0 or a <= 0 or vmax < 0 or v0 < 0 or d < 0:
+    # Convert parameters to floats for consistency
+    a = float(a_max)
+    T = float(time_total)
+    v0 = float(v_initial)
+    V_max = float(v_max)
+
+    # Basic input validation
+    if T <= 0 or a <= 0 or V_max < 0 or v0 < 0 or distance < 0:
         return None
 
-    t = np.linspace(0.0, T, n)
-    trapz = lambda x: float(np.trapz(x, t))
+    # Discretize the time interval [0, T]
+    time_array = np.linspace(0.0, T, n_points)
+    # Helper: compute area under speed curve using trapezoidal rule
+    area_under = lambda speed_curve: float(np.trapz(speed_curve, time_array))
 
-    def envelopes(v1, cap=None):
-        # cap is an optional temporary speed limit (<= v_max) to “flatten” the profile
-        lim = vmax if cap is None else min(vmax, cap)
-        up = np.minimum.reduce([np.full(n, lim), v0 + a*t, v1 + a*(T - t)])
-        lo = np.maximum.reduce([np.zeros(n),     v0 - a*t, v1 - a*(T - t)])
-        return lo, up
+    def envelope_bounds(v_exit, speed_cap=None):
+        """
+        Computes the lower and upper bounds (envelopes) for the speed profile.
+        
+        speed_cap: optional temporary speed limit (must be <= V_max).
+        """
+        cap = V_max if speed_cap is None else min(V_max, speed_cap)
+        upper_bound = np.minimum.reduce([
+            np.full(n_points, cap),
+            v0 + a * time_array,
+            v_exit + a * (T - time_array)
+        ])
+        lower_bound = np.maximum.reduce([
+            np.zeros(n_points),
+            v0 - a * time_array,
+            v_exit - a * (T - time_array)
+        ])
+        return lower_bound, upper_bound
 
-    def fill_from_top(lo, up, area):
-        lam_lo, lam_hi = 0.0, float(np.max(up - lo))
+    def adjust_speed_from_top(lower_bound, upper_bound, target_area):
+        """
+        Returns a speed profile by subtracting an optimized constant from the top of the upper_bound,
+        ensuring that the area under the profile is as close as possible to target_area.
+        """
+        lam_low = 0.0
+        lam_high = float(np.max(upper_bound - lower_bound))
         for _ in range(60):
-            lam = 0.5*(lam_lo + lam_hi)
-            v = np.clip(up - lam, lo, up)
-            if trapz(v) > area:
-                lam_lo = lam
+            lam = 0.5 * (lam_low + lam_high)
+            candidate_speed = np.clip(upper_bound - lam, lower_bound, upper_bound)
+            if area_under(candidate_speed) > target_area:
+                lam_low = lam
             else:
-                lam_hi = lam
-        return np.clip(up - lam_hi, lo, up)
+                lam_high = lam
+        return np.clip(upper_bound - lam_high, lower_bound, upper_bound)
 
-    # terminal-speed bounds from accel and v_max
-    loB = max(0.0, v0 - a*T)
-    hiB = min(vmax, v0 + a*T)
+    # Compute terminal speed bounds from acceleration constraints
+    v_terminal_lower = max(0.0, v0 - a * T)
+    v_terminal_upper = min(V_max, v0 + a * T)
 
-    # quick feasibility with true v_max
-    smax = trapz(np.minimum.reduce([np.full(n, vmax), v0 + a*t, hiB + a*(T - t)]))
-    smin = trapz(np.maximum.reduce([np.zeros(n),       v0 - a*t, loB - a*(T - t)]))
-    epsA = 1e-6 * max(1.0, d, vmax*T)
-    if d > smax + epsA or d < smin - epsA:
+    # Quick feasibility check with maximum acceleration and true V_max
+    s_max_possible = area_under(
+        np.minimum.reduce([
+            np.full(n_points, V_max),
+            v0 + a * time_array,
+            v_terminal_upper + a * (T - time_array)
+        ])
+    )
+    s_min_possible = area_under(
+        np.maximum.reduce([
+            np.zeros(n_points),
+            v0 - a * time_array,
+            v_terminal_lower - a * (T - time_array)
+        ])
+    )
+    tolerance = 1e-6 * max(1.0, distance, V_max * T)
+    if distance > s_max_possible + tolerance or distance < s_min_possible - tolerance:
         return None
 
-    # helper for minimal area attainable for a given terminal speed
-    def smin_given(v1):
-        lo = np.maximum.reduce([np.zeros(n), v0 - a*t, v1 - a*(T - t)])
-        return trapz(lo)
+    # Helper: minimal area attainable given a candidate exit speed
+    def minimal_area_for_exit(v_exit_candidate):
+        lower_env = np.maximum.reduce([
+            np.zeros(n_points),
+            v0 - a * time_array,
+            v_exit_candidate - a * (T - time_array)
+        ])
+        return area_under(lower_env)
 
-    # --- mode: time-optimal (original behavior) -------------------------------
+    # Mode "time": aim for maximal exit speed (original behavior)
     if mode == "time":
-        if d >= smin_given(hiB) - epsA:
-            v1 = hiB
+        if distance >= minimal_area_for_exit(v_terminal_upper) - tolerance:
+            v_exit = v_terminal_upper
         else:
-            L, R = loB, hiB
+            L, R = v_terminal_lower, v_terminal_upper
             for _ in range(60):
-                m = 0.5*(L + R)
-                if smin_given(m) > d:
-                    R = m
+                mid = 0.5 * (L + R)
+                if minimal_area_for_exit(mid) > distance:
+                    R = mid
                 else:
-                    L = m
-            v1 = L
-        lo, up = envelopes(v1)
-        v = fill_from_top(lo, up, d)
-        v[0], v[-1] = v0, v1
-        return t, v, v1
+                    L = mid
+            v_exit = L
+        lower_env, upper_env = envelope_bounds(v_exit)
+        speed_profile = adjust_speed_from_top(lower_env, upper_env, distance)
+        # Enforce boundary conditions
+        speed_profile[0] = v0
+        speed_profile[-1] = v_exit
+        return time_array, speed_profile, v_exit
 
-    # --- mode: flat (minimize peak speed subject to covering d) ---------------
-    # respect any required exit-speed lower bound
-    if v1_min is None:
-        v1_req = loB
-    else:
-        v1_req = max(loB, min(hiB, float(v1_min)))
+    # Mode "flat": choose the smallest speed cap covering the distance.
+    # Determine required exit speed lower bound
+    required_v_exit = v_terminal_lower if min_exit_speed is None else max(v_terminal_lower, min(v_terminal_upper, float(min_exit_speed)))
 
-    # bisection on temporary speed cap c in [c_lo, c_hi] to find the smallest
-    # cap that still allows area >= d.
-    def smax_with_cap(c):
-        # Use the best (largest allowed) v1 under this cap for the "can we reach d?" test
-        v1c = min(hiB, c)
-        _, upc = envelopes(v1c, cap=c)
-        return trapz(upc)
+    def max_area_with_cap(speed_cap):
+        """Computes the maximum area achievable under a temporary speed cap."""
+        v_exit_cap = min(v_terminal_upper, speed_cap)
+        _, up_bound = envelope_bounds(v_exit_cap, speed_cap)
+        return area_under(up_bound)
 
-    c_lo = max(0.0, v1_req)   # cap must be at least required exit speed
-    c_hi = vmax
-    if d > smax_with_cap(c_hi) + epsA:
-        return None  # even full v_max cap can't cover distance (shouldn't happen due to earlier check)
+    cap_low = max(0.0, required_v_exit)
+    cap_high = V_max
+    if distance > max_area_with_cap(cap_high) + tolerance:
+        return None  # Infeasible even with full speed cap
 
     for _ in range(60):
-        c_mid = 0.5*(c_lo + c_hi)
-        if smax_with_cap(c_mid) >= d - epsA:
-            c_hi = c_mid
+        cap_mid = 0.5 * (cap_low + cap_high)
+        if max_area_with_cap(cap_mid) >= distance - tolerance:
+            cap_high = cap_mid
         else:
-            c_lo = c_mid
-    cap = c_hi
+            cap_low = cap_mid
+    speed_cap = cap_high
 
-    # choose an exit speed not exceeding the cap, but >= v1_req
-    v1 = max(v1_req, min(hiB, cap))
-
-    lo, up = envelopes(v1, cap=cap)
-    v = fill_from_top(lo, up, d)
-    v[0], v[-1] = v0, v1
-    return t, v, v1
-
+    # Choose an exit speed not exceeding the cap but at least required_v_exit
+    v_exit = max(required_v_exit, min(v_terminal_upper, speed_cap))
+    lower_env, upper_env = envelope_bounds(v_exit, speed_cap)
+    speed_profile = adjust_speed_from_top(lower_env, upper_env, distance)
+    speed_profile[0], speed_profile[-1] = v0, v_exit
+    return time_array, speed_profile, v_exit
 
 def build_global_knots(segments):
     times = [segments[0][0][0]]

@@ -33,7 +33,7 @@ for i, d in enumerate(distances):
     t_uncon = t + T_min_link(d, v, v_max, a_max)
     t_cross = earliest_green_at_or_after(t_uncon, windows[i], cycles[i])
     dt = t_cross - t
-    res = solve_profile_segment(d, v, dt, v_max, a_max)  # returns (t_rel, v, v_exit) or None
+    res = solve_profile_segment(d, v, dt, v_max, a_max, mode='flat')
     if res is None:
         raise RuntimeError(f"Infeasible segment {i}: d={d}, dt={dt}, v_in={v}, v_max={v_max}, a_max={a_max}")
     seg_t_rel, seg_v, v_exit = res
