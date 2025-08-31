@@ -35,7 +35,7 @@ for i, d in enumerate(distances):
     t_uncon = t + T_min_link(d, v, v_max, a_max)
     t_cross = earliest_green_at_or_after(t_uncon, windows[i], cycles[i])
     dt = t_cross - t
-    res = solve_profile_segment(d, v, dt, v_max, a_max, mode='time')
+    res = solve_profile_segment(d, v, dt, v_max, a_max, mode='flat')
     if res is None:
         raise RuntimeError(f"Infeasible segment {i}: d={d}, dt={dt}, v_in={v}, v_max={v_max}, a_max={a_max}")
     seg_t_rel, seg_v, v_exit = res
@@ -76,7 +76,7 @@ sim_data = {
     'cum_dist': np.array(cum_dist),
     'times': times,
     'speeds': speeds_kmh,   # speeds in km/h for plotting
-    'avg_speeds': avg_speeds, # avg speeds in km/h for plotting
+    'avg_speeds': None, # avg speeds in km/h for plotting
     'pos_func': sim_pos_of_t,
     'speed_func': sim_speed_of_t,
     't_samples': t_samples,

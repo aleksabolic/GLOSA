@@ -23,11 +23,11 @@ def animate_road_view(sim_data):
         ax.axvline(x, linestyle="--", linewidth=0.8)
         labels.append(ax.text(x, 0.8, "?", ha="center", va="center"))
         
-    car_point, = ax.plot([0], [0], marker="o", markersize=10)
+    car_point, = ax.plot([0], [0], marker="o", markersize=10, label='Optimal')
     # optional greedy car
     greedy_point = None
     if 'greedy' in sim_data:
-        greedy_point, = ax.plot([0], [0], marker="s", color='orange', markersize=8)
+        greedy_point, = ax.plot([0], [0], marker="s", color='orange', markersize=8, label='Greedy')
     time_text = ax.text(0.02 * cum_dist[-1], 1.2, "", ha="left", va="center")
     
     def init():
@@ -37,6 +37,8 @@ def animate_road_view(sim_data):
         time_text.set_text("t = 0.0 s")
         for txt in labels:
             txt.set_text("?")
+        # show legend for optimal vs greedy (if present)
+        ax.legend(loc='upper right')
         if greedy_point is not None:
             return (car_point, greedy_point, time_text, *labels)
         return (car_point, time_text, *labels)
@@ -70,13 +72,16 @@ def animate_speed(sim_data):
     ax.set_xlabel("time (s)")
     ax.set_ylabel("speed (km/h)")
     ax.set_title("Speed vs time (km/h)")
-    ax.plot(times, speeds)
+    ax.plot(times, speeds, label='Optimal')
+    # plot average segment speeds if available
+    if avg_speeds is not None:
+        ax.plot(times, avg_speeds, c='r', label='Avg segment speed')
     
     cursor_point, = ax.plot([0], [speeds[0]], marker="o")
     greedy_cursor = None
     if 'greedy' in sim_data:
         g = sim_data['greedy']
-        ax.plot(g['times'], g['speeds'], c='orange', linestyle='--')
+        ax.plot(g['times'], g['speeds'], c='orange', linestyle='--', label='Greedy')
         greedy_cursor, = ax.plot([0], [g['speeds'][0]], marker='s', color='orange')
     cursor_line = ax.axvline(0.0, linestyle="--", linewidth=0.8)
     
@@ -85,6 +90,8 @@ def animate_speed(sim_data):
         if greedy_cursor is not None:
             greedy_cursor.set_data([0], [sim_data['greedy']['speeds'][0]])
         cursor_line.set_xdata([0.0, 0.0])
+        # legend for speed plot
+        ax.legend(loc='upper right')
         if greedy_cursor is not None:
             return (cursor_point, greedy_cursor, cursor_line)
         return (cursor_point, cursor_line)
