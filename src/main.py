@@ -88,7 +88,7 @@ sim_data = {
 }
 
 # Run greedy driver simulation (discrete-time)
-g_times, g_speeds, g_cross_times, g_cross_speeds = simulate_greedy(distances, cycles, windows, v_max, a_max, t0=t0, v0=v0, dt=0.2)
+g_times, g_speeds, g_cross_times, g_cross_speeds = simulate_greedy(distances, cycles, windows, v_max, a_max, t0=t0, v0=v0, dt=0.001)
 
 # convert greedy speeds to km/h for plotting
 g_speeds_kmh = g_speeds * 3.6
