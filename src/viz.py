@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
+from matplotlib.transforms import blended_transform_factory
 from utils import pos_of_t, speed_of_t, is_green
 
 def animate_road_view(sim_data):
@@ -149,7 +150,8 @@ def animate_stacked(sim_data):
 
     # ---- Top: road view (time axis as primary x), plus twin top x for position ----
     ax_top.set_xlim(t[0], t[-1])
-    ax_top.set_ylim(-1.0, 1.5)
+    ax_top.set_ylim(-0.6, 1.6)
+
     ax_top.set_ylabel("road")
     ax_top.set_yticks([])
     ax_top.set_title("Road view")
@@ -157,6 +159,7 @@ def animate_stacked(sim_data):
     # Twin x-axis for position (plots go on ax_top2)
     ax_top2 = ax_top.twiny()
     ax_top2.set_xlim(cum_dist[0], cum_dist[-1])
+    ax_top2.margins(x=0.02)  # add ~2% padding on both sides
     ax_top2.set_xlabel("position (m)")
 
     # Baseline road on position axis
@@ -165,10 +168,14 @@ def animate_stacked(sim_data):
     # Light guides, labels, markers (position-native on ax_top2)
     light_xs = list(cum_dist[1:])
     n_lights = len(light_xs)
-    _ = [ax_top2.plot([x, x], [-0.2, 1.3], ls='--', lw=0.8, clip_on=False)[0] for x in light_xs]
-    labels = [ax_top2.text(x, 0.8, "?", ha="center", va="center") for x in light_xs]
-    light_markers = [ax_top2.scatter([x], [0.6], s=220, c=['gray'], edgecolors='k', zorder=3)
-                     for x in light_xs]
+    bt = blended_transform_factory(ax_top2.transData, ax_top2.transAxes)
+    light_guides = [ax_top2.plot([x, x], [0, 1], ls='--', lw=0.8,
+                                transform=bt, clip_on=False, zorder=0, c='C0')[0]
+                    for x in light_xs]
+    labels = [ax_top2.text(x, 0.8, "?", ha="center", va="center",
+                       clip_on=False, zorder=5) for x in light_xs]
+    light_markers = [ax_top2.scatter([x], [0.6], s=220, c=['gray'], edgecolors='k',
+                                    zorder=6, clip_on=False) for x in light_xs]
 
     # Car markers (position-native on ax_top2)
     car_opt, = ax_top2.plot([posf(t[0])], [0], marker="o", ms=8, label='Optimal')
@@ -275,8 +282,6 @@ def animate_stacked(sim_data):
 
     anim = FuncAnimation(fig, update, frames=len(t), init_func=init, blit=True, interval=1000/60)
     return anim
-
-
 
 
 def show_plots():

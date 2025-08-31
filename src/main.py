@@ -123,5 +123,8 @@ print(f'total time: {total_time}')
 # anim2._fig.tight_layout()
 # anim2.save("./plots/speed_anim.gif", writer='pillow', fps=30)
 
+# anim3._fig.tight_layout()
+# anim3.save("./plots/stacked_anim.gif", writer="pillow", fps=30)
+
 # Show plots
 show_plots()

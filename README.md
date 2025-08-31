@@ -47,10 +47,12 @@ After setting up the environment, you can run the GLosa algorithm and visualize 
 
 ## Traffic Animations
 
-### Car Animation
+![Animation](plots/stacked_anim.gif)
+
+<!-- ### Car Animation
 
 ![Car Animation](plots/car_anim.gif)
 
 ### Speed Profile
 
-![Speed Animation](plots/speed_anim.gif)
+![Speed Animation](plots/speed_anim.gif) -->
