@@ -13,12 +13,16 @@ from utils import simulate_greedy
 
 # Problem setup
 distances = [300.0, 450.0, 280.0, 500.0, 350.0, 420.0, 380.0, 600.0]
+
+# normal glosa viz
 # cycles    = [65.0, 72.0, 58.0, 80.0, 70.0, 60.0, 75.0, 90.0]
 # offsets   = [10.0, 20.0, 5.0,  30.0, 12.0, 25.0, 15.0,  40.0]
 # g_durs    = [25.0, 22.0, 18.0, 28.0, 20.0, 18.0, 24.0,  30.0]
-cycles  = [75.0, 75.0, 75.0, 75.0, 75.0, 75.0, 75.0, 75.0]
-offsets = [12.0, 37.0,  9.0, 33.0, 12.0, 39.0, 14.0, 44.0]
-g_durs  = [25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0]
+
+# 45 km/h green wave
+cycles  = [50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
+offsets = [24.0, 10.0, 32.4, 22.4, 0.4, 34.0, 14.4, 12.4]   # aligned to a ~12.5 m/s wave
+g_durs  = [12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0]
 
 windows  = [[(off, off+dur)] for off, dur in zip(offsets, g_durs)]
 v_max, a_max = 60/3.6, 1.0
@@ -126,7 +130,7 @@ print(f'total time: {total_time}')
 # anim2.save("./plots/speed_anim.gif", writer='pillow', fps=30)
 
 # anim3._fig.tight_layout()
-# anim3.save("./plots/stacked_anim.gif", writer="pillow", fps=30)
+# anim3.save("./plots/45gw.gif", writer="pillow", fps=30)
 
 # Show plots
 show_plots()

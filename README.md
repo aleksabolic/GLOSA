@@ -47,7 +47,11 @@ After setting up the environment, you can run the GLosa algorithm and visualize 
 
 ## Traffic Animations
 
+### GLosa performance on a random road
 ![Animation](plots/stacked_anim.gif)
+
+### Glosa performance on a 45 km/h green wave
+![Green wave performance](plots/45gw.gif)
 
 <!-- ### Car Animation
 
