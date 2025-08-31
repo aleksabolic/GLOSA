@@ -22,6 +22,12 @@ def animate_road_view(sim_data):
     for i, x in enumerate(cum_dist[1:], start=1):
         ax.axvline(x, linestyle="--", linewidth=0.8)
         labels.append(ax.text(x, 0.8, "?", ha="center", va="center"))
+    # colored markers to indicate current light state (red/green)
+    light_markers = []
+    for i, x in enumerate(cum_dist[1:], start=1):
+        # place a square marker slightly above the road, use PathCollection for easy facecolor updates
+        m = ax.scatter([x], [0.6], s=220, c=['gray'], edgecolors='k', zorder=3)
+        light_markers.append(m)
         
     car_point, = ax.plot([0], [0], marker="o", markersize=10, label='Optimal')
     # optional greedy car
@@ -37,11 +43,16 @@ def animate_road_view(sim_data):
         time_text.set_text("t = 0.0 s")
         for txt in labels:
             txt.set_text("?")
+        # initialize light marker colors at t=0
+        for idx, m in enumerate(light_markers):
+            col = 'green' if is_green(idx, 0.0, cycles, windows) else 'red'
+            m.set_facecolor(col)
         # show legend for optimal vs greedy (if present)
         ax.legend(loc='upper right')
+        # include light markers in returned artists so blitting updates their colors
         if greedy_point is not None:
-            return (car_point, greedy_point, time_text, *labels)
-        return (car_point, time_text, *labels)
+            return (car_point, greedy_point, time_text, *labels, *light_markers)
+        return (car_point, time_text, *labels, *light_markers)
     
     def update(f):
         tq = t_samples[f]
@@ -50,12 +61,15 @@ def animate_road_view(sim_data):
             greedy_pos = sim_data['greedy']['pos_func'](tq)
             greedy_point.set_data([greedy_pos], [0.2])
         time_text.set_text(f"t = {tq:5.1f} s")
-        for i, _ in enumerate(cum_dist[1:]):
-            txt = "G" if is_green(i, tq, cycles, windows) else "R"
-            labels[i].set_text(txt)
+        for idx, _ in enumerate(cum_dist[1:]):
+            txt = "G" if is_green(idx, tq, cycles, windows) else "R"
+            labels[idx].set_text(txt)
+            # update colored marker as well
+            col = 'green' if is_green(idx, tq, cycles, windows) else 'red'
+            light_markers[idx].set_facecolor(col)
         if greedy_point is not None:
-            return (car_point, greedy_point, time_text, *labels)
-        return (car_point, time_text, *labels)
+            return (car_point, greedy_point, time_text, *labels, *light_markers)
+        return (car_point, time_text, *labels, *light_markers)
     
     anim = FuncAnimation(fig, update, frames=len(t_samples), init_func=init, blit=True, interval=1000/60)
     return anim
