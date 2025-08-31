@@ -8,7 +8,7 @@ from utils import (
     speed_of_t,
     pos_of_t
 )
-from viz import animate_road_view, animate_speed, show_plots
+from viz import animate_road_view, animate_speed, show_plots, animate_stacked
 from utils import simulate_greedy
 
 # Problem setup
@@ -111,8 +111,9 @@ sim_data['greedy'] = {
 }
 
 # Create animations
-anim1 = animate_road_view(sim_data)
-anim2 = animate_speed(sim_data)
+# anim1 = animate_road_view(sim_data)
+# anim2 = animate_speed(sim_data)
+anim3 = animate_stacked(sim_data)
 print(f'total time: {total_time}')
 
 # Save plots

@@ -125,5 +125,159 @@ def animate_speed(sim_data):
     anim = FuncAnimation(fig, update, frames=len(t_samples), init_func=init, blit=True, interval=1000/60)
     return anim
 
+
+from matplotlib.animation import FuncAnimation
+import numpy as np
+import matplotlib.pyplot as plt
+
+def animate_stacked(sim_data):
+    # Unpack
+    t = np.asarray(sim_data['t_samples'])
+    posf = sim_data['pos_func']
+    speedf = sim_data['speed_func']
+    times = np.asarray(sim_data['times'])
+    speeds = np.asarray(sim_data['speeds'])
+    avg_speeds = sim_data.get('avg_speeds')
+    cum_dist = np.asarray(sim_data['cum_dist'])
+    cycles = sim_data['cycles']
+    windows = sim_data['windows']
+
+    # Figure & axes (share time on x between top (primary) & bottom)
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, figsize=(9, 6), sharex=True, height_ratios=[1, 1], constrained_layout=True
+    )
+
+    # ---- Top: road view (time axis as primary x), plus twin top x for position ----
+    ax_top.set_xlim(t[0], t[-1])
+    ax_top.set_ylim(-1.0, 1.5)
+    ax_top.set_ylabel("road")
+    ax_top.set_yticks([])
+    ax_top.set_title("Road view")
+
+    # Twin x-axis for position (plots go on ax_top2)
+    ax_top2 = ax_top.twiny()
+    ax_top2.set_xlim(cum_dist[0], cum_dist[-1])
+    ax_top2.set_xlabel("position (m)")
+
+    # Baseline road on position axis
+    ax_top2.plot([cum_dist[0], cum_dist[-1]], [0, 0], lw=1, clip_on=False)
+
+    # Light guides, labels, markers (position-native on ax_top2)
+    light_xs = list(cum_dist[1:])
+    n_lights = len(light_xs)
+    _ = [ax_top2.plot([x, x], [-0.2, 1.3], ls='--', lw=0.8, clip_on=False)[0] for x in light_xs]
+    labels = [ax_top2.text(x, 0.8, "?", ha="center", va="center") for x in light_xs]
+    light_markers = [ax_top2.scatter([x], [0.6], s=220, c=['gray'], edgecolors='k', zorder=3)
+                     for x in light_xs]
+
+    # Car markers (position-native on ax_top2)
+    car_opt, = ax_top2.plot([posf(t[0])], [0], marker="o", ms=8, label='Optimal')
+    car_greedy = None
+    g_posf = None
+    g_speedf = None
+    if 'greedy' in sim_data:
+        g = sim_data['greedy']
+        g_posf = g.get('pos_func')
+        if g_posf is None:
+            if 'positions' in g:
+                g_posf = lambda tt, gt=np.asarray(g['times']), gx=np.asarray(g['positions']): np.interp(tt, gt, gx)
+            elif 'times' in g and 'speeds' in g:
+                gt = np.asarray(g['times'])
+                gv = np.asarray(g['speeds']) / 3.6  # km/h -> m/s
+                gpos = np.cumsum(np.r_[0.0, 0.5*(gv[1:]+gv[:-1])*(gt[1:]-gt[:-1])])
+                g_posf = lambda tt, gt=gt, gpos=gpos: np.interp(tt, gt, gpos)
+        g_speedf = g.get('speed_func')
+        car_greedy, = ax_top2.plot([g_posf(t[0])], [0.2], marker="s", ms=6, color='orange', label='Greedy')
+
+    # Time label anchored to axes for stability
+    time_text = ax_top.text(0.02, 0.9, "", ha="left", va="center", transform=ax_top.transAxes)
+    # One legend (put it on ax_top so it doesn't overlap ax_top2 spines)
+    handles = [car_opt]
+    labels_ = ['Optimal']
+    if 'greedy' in sim_data and car_greedy is not None:
+        handles.append(car_greedy)
+        labels_.append('Greedy')
+
+    leg = ax_top2.legend(handles, labels_, loc='upper right',
+                        frameon=True, facecolor='white', edgecolor='0.8')
+    leg.set_zorder(10)
+
+    # ---- Bottom: speed vs time (shared x with ax_top primary) ----
+    ax_bot.set_xlim(t[0], t[-1])
+    ax_bot.set_xlabel("time (s)")
+    ax_bot.set_ylabel("speed (km/h)")
+    ax_bot.set_title("Speed vs time (km/h)")
+
+    ax_bot.plot(times, speeds, label='Optimal')
+    if avg_speeds is not None:
+        ax_bot.plot(times, avg_speeds, c='r', label='Avg segment speed')
+
+    cursor, = ax_bot.plot([t[0]], [speedf(t[0])], marker="o")
+    g_cursor = None
+    if 'greedy' in sim_data:
+        g = sim_data['greedy']
+        if 'times' in g and 'speeds' in g:
+            ax_bot.plot(g['times'], g['speeds'], c='orange', linestyle='--', label='Greedy')
+        g_cursor, = ax_bot.plot([t[0]], [(g_speedf(t[0]) if g_speedf else np.interp(t[0], g['times'], g['speeds']))],
+                                marker='s', color='orange')
+
+    vline = ax_bot.axvline(t[0], ls="--", lw=0.8)
+    ax_bot.legend(loc='upper right')
+
+    # ---- Animation funcs ----
+    def init():
+        car_opt.set_data([posf(t[0])], [0])
+        if car_greedy is not None:
+            car_greedy.set_data([g_posf(t[0])], [0.2])
+        time_text.set_text(f"t = {t[0]:.1f} s")
+        for i in range(n_lights):
+            col = 'green' if is_green(i, 0.0, cycles, windows) else 'red'
+            light_markers[i].set_facecolor(col)
+            labels[i].set_text('G' if col == 'green' else 'R')
+        cursor.set_data([t[0]], [speedf(t[0])])
+        if g_cursor is not None:
+            g0 = g_speedf(t[0]) if g_speedf else np.interp(t[0], sim_data['greedy']['times'], sim_data['greedy']['speeds'])
+            g_cursor.set_data([t[0]], [g0])
+        vline.set_xdata([t[0], t[0]])
+
+        artists = [car_opt, time_text, cursor, vline, *labels, *light_markers]
+        if car_greedy is not None:
+            artists.insert(1, car_greedy)
+            if g_cursor is not None:
+                artists.insert(3, g_cursor)
+        return tuple(artists)
+
+    def update(f):
+        tt = t[f]
+        # Move cars by their positions (on ax_top2)
+        car_opt.set_data([posf(tt)], [0])
+        if car_greedy is not None:
+            car_greedy.set_data([g_posf(tt)], [0.2])
+        time_text.set_text(f"t = {tt:5.1f} s")
+        # Update lights’ state at current time
+        for i in range(n_lights):
+            col = 'green' if is_green(i, tt, cycles, windows) else 'red'
+            light_markers[i].set_facecolor(col)
+            labels[i].set_text('G' if col == 'green' else 'R')
+        # Speed cursors and time cursor
+        cursor.set_data([tt], [speedf(tt)])
+        if g_cursor is not None:
+            gv = g_speedf(tt) if g_speedf else np.interp(tt, sim_data['greedy']['times'], sim_data['greedy']['speeds'])
+            g_cursor.set_data([tt], [gv])
+        vline.set_xdata([tt, tt])
+
+        artists = [car_opt, time_text, cursor, vline, *labels, *light_markers]
+        if car_greedy is not None:
+            artists.insert(1, car_greedy)
+            if g_cursor is not None:
+                artists.insert(3, g_cursor)
+        return tuple(artists)
+
+    anim = FuncAnimation(fig, update, frames=len(t), init_func=init, blit=True, interval=1000/60)
+    return anim
+
+
+
+
 def show_plots():
     plt.show()
