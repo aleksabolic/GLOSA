@@ -9,6 +9,7 @@ from utils import (
     pos_of_t
 )
 from viz import animate_road_view, animate_speed, show_plots
+from utils import simulate_greedy
 
 # Problem setup
 distances = [300.0, 450.0, 280.0, 500.0, 350.0, 420.0, 380.0, 600.0]
@@ -27,17 +28,19 @@ for d in distances:
     cum_dist.append(cum_dist[-1] + d)
 t, v = t0, v0
 segments = []
+avg_segments = []
 cross_times = [t0]
 cross_speeds = [v0]
 for i, d in enumerate(distances):
     t_uncon = t + T_min_link(d, v, v_max, a_max)
     t_cross = earliest_green_at_or_after(t_uncon, windows[i], cycles[i])
     dt = t_cross - t
-    res = solve_profile_segment(d, v, dt, v_max, a_max, mode='flat')
+    res = solve_profile_segment(d, v, dt, v_max, a_max, mode='time')
     if res is None:
         raise RuntimeError(f"Infeasible segment {i}: d={d}, dt={dt}, v_in={v}, v_max={v_max}, a_max={a_max}")
     seg_t_rel, seg_v, v_exit = res
     segments.append((t + seg_t_rel, seg_v))
+    avg_segments.append((t+ seg_t_rel, np.array([d/dt]*len(seg_t_rel))))
     t, v = t_cross, v_exit
     cross_times.append(t)
     cross_speeds.append(v)
@@ -47,6 +50,10 @@ total_time = cross_times[-1] - t0
 times, speeds = build_global_knots(segments)
 # Convert speeds to km/h for display
 speeds_kmh = speeds * 3.6
+
+# Build global knots for avg speeds on each segment
+_, avg_speeds = build_global_knots(avg_segments)
+avg_speeds = avg_speeds * 3.6
 
 # Build position knots (using speeds in m/s)
 pos_knots = build_pos_knots(times, speeds)
@@ -69,6 +76,7 @@ sim_data = {
     'cum_dist': np.array(cum_dist),
     'times': times,
     'speeds': speeds_kmh,   # speeds in km/h for plotting
+    'avg_speeds': avg_speeds, # avg speeds in km/h for plotting
     'pos_func': sim_pos_of_t,
     'speed_func': sim_speed_of_t,
     't_samples': t_samples,
@@ -77,11 +85,37 @@ sim_data = {
     'windows': windows
 }
 
+# Run greedy driver simulation (discrete-time)
+g_times, g_speeds, g_cross_times, g_cross_speeds = simulate_greedy(distances, cycles, windows, v_max, a_max, t0=t0, v0=v0, dt=0.2)
+
+# convert greedy speeds to km/h for plotting
+g_speeds_kmh = g_speeds * 3.6
+
+# build greedy position knots for plotting convenience
+from utils import build_global_knots, build_pos_knots, speed_of_t, pos_of_t
+g_times_knots, g_speeds_knots = build_global_knots([(g_times, g_speeds)])
+g_pos_knots = build_pos_knots(g_times_knots, g_speeds_knots)
+
+def sim_g_speed_of_t(tq):
+    return 3.6 * speed_of_t(tq, g_times_knots, g_speeds_knots)
+
+def sim_g_pos_of_t(tq):
+    return pos_of_t(tq, g_times_knots, g_speeds_knots, g_pos_knots)
+
+# Greedy sim data
+sim_data['greedy'] = {
+    'times': g_times_knots,
+    'speeds': g_speeds_kmh,
+    'pos_func': sim_g_pos_of_t,
+    'speed_func': sim_g_speed_of_t,
+}
+
 # Create animations
 anim1 = animate_road_view(sim_data)
 anim2 = animate_speed(sim_data)
 print(f'total time: {total_time}')
 
+# Save plots
 # anim1._fig.tight_layout()
 # anim1.save("./plots/car_anim.gif", writer='pillow', fps=30)
 
