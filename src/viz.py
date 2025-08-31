@@ -126,11 +126,6 @@ def animate_speed(sim_data):
     anim = FuncAnimation(fig, update, frames=len(t_samples), init_func=init, blit=True, interval=1000/60)
     return anim
 
-
-from matplotlib.animation import FuncAnimation
-import numpy as np
-import matplotlib.pyplot as plt
-
 def animate_stacked(sim_data):
     # Unpack
     t = np.asarray(sim_data['t_samples'])
